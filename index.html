@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ja">
+
+	<head>
+		<meta charset="utf-8">
+
+		<title>BareCloud</title>
+
+		<meta name="description" content="2014/09/18 第2回 システム系論文輪読会 発表資料">
+		<meta name="author" content="Yuma Kurogome">
+
+		<meta name="apple-mobile-web-app-capable" content="yes" />
+		<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<link rel="stylesheet" href="css/reveal.min.css">
+		<link rel="stylesheet" href="css/theme/default.css" id="theme">
+
+		<!-- For syntax highlighting -->
+		<link rel="stylesheet" href="lib/css/zenburn.css">
+
+		<!-- If the query includes 'print-pdf', include the PDF print sheet -->
+		<script>
+			if( window.location.search.match( /print-pdf/gi ) ) {
+				var link = document.createElement( 'link' );
+				link.rel = 'stylesheet';
+				link.type = 'text/css';
+				link.href = 'css/print/pdf.css';
+				document.getElementsByTagName( 'head' )[0].appendChild( link );
+			}
+		</script>
+
+		<!--[if lt IE 9]>
+		<script src="lib/js/html5shiv.js"></script>
+		<![endif]-->
+	</head>
+
+	<body>
+
+		<div class="reveal">
+
+			<!-- Any section element inside of this container is displayed as a slide -->
+			<div class="slides">
+				<section	data-markdown
+							data-separator="^\n---$"
+							data-vertical="^\n>>>$">
+					<script type="text/template">
+Reading
+## BareCloud: Bare-metal Analysis-based<br>Evasive Malware Detection<br>(USENIX Security'14)
+[@ntddk](http://ntddk.github.io/)  
+第2回 システム系論文輪読会  
+[\#pfisystemreading](https://twitter.com/search?f=realtime&q=pfisystemreading&src=typd)<br>
+
+---
+
+## 背景(1/5)
+* マルウェアを自動解析するsandboxが広く用いられている
+	- e.g. TTAnalyze[EICAR'06], Panorama[ACM CCS'07]
+* マルウェアはsandboxを検出して解析を妨害しようとする
+	- Evasive malwareと呼称
+
+>>>
+
+## 背景(2/5)
+### Sandbox Evasion Techniques
+例えば，VMwareを検出する手がかりはたくさんある
+
+* デバイスファイル
+	- vmhgfs.sys, vmmouse.sys
+* サービス
+	- vmicheatbeat, vmci, vmdebug, vmmouse, vmscis, VMTools, vmware, vmx86, vmhgfs, vmxnet
+* バックドアポート
+```
+mov    eax, 'VMXh'
+mov    ebx, 0
+mov    ecx, 10      // VMWare version
+mov    edx, 'VX'    // port number
+in     eax, dx      // read port
+cmp    ebx, 'VMXh'
+```
+* IDTR，GDTR，LDTR
+
+>>>
+
+## 背景(3/5)
+### Transparent sandbox
+* 実機と区別できないsandboxを作り出す試み
+* e.g. Ether[ACM CCS`08]
+	- Xenをベースに実装
+	- 解析前にゲストOSのメモリを探索してPIDとTIDが保存されている箇所を特定
+	- VMwareのようにゲストOSにコンポーネントを挿入しない<br> -> 検出されにくい
+
+>>>
+
+## 背景(4/5)
+### Transparent sandboxの不可能性
+* Timing Attack
+	- パケットに付与されるタイムスタンプがジャンプするのを捉える
+	- TSC_OFFSET
+	- e.g. nEther[Eurosec'11]
+* "Environment-sensitive" malwareの登場
+	- 感染したマシン固有の情報を実行ファイルに埋め込む
+	- e.g. GUID, MACアドレス, プロダクトID, レジストリエントリ, 実行ファイルのパス, IPアドレス
+	- 同じ検体をsandboxで動作させない
+
+>>>
+
+## 背景(5/5)
+### Evasion Detection
+* Sandboxを回避しようとするマルウェアを検出する
+	- 複数の環境で同じ検体を実行
+	- 振る舞いの違いを検出し，根本的な原因を特定
+	- マルウェアに検出されないようsandboxを変更
+	- e.g. DISARM[RAID'11]
+
+---
+
+## 本論文の概要(1/2)
+### BareCloud: Bare-metal Analysis-based<br>Evasive Malware Detection
+* Evasion detectionのstate-of-the-art
+* 階層ベースの振る舞い比較手法を導入
+* 110,005検体の中から5,835検体のevasive malwareを抽出
+
+>>>
+
+## 本論文の概要(2/2)
+### BareCloud: Bare-metal Analysis-based<br>Evasive Malware Detection
+* 筆者の一人，Christopher Kruegelはマルウェア解析の大御所
+	- Full System Emulation:
+Achieving Successful Automated Dynamic Analysis of Evasive Malware[BlackHat USA'14]
+	- マルウェアの自動解析における課題が整理されている
+* 日本人の論文もreferされていた
+	- Your Sandbox is Blinded: Impact of Decoy Injection to Public Malware Analysis Systems
+	- 横浜国立大学 松本研
+
+---
+
+## システムの構成(1/5)
+* スケジューラを通して4つの解析環境で検体を同時に実行
+	- VirtualBox
+	- Anubis
+	- Ether
+	- ベアメタル
+
+>>>
+
+## システムの構成(2/5)
+### VirtualBox
+* Cockoo Sandboxをインストール
+* ゲストに解析用コンポーネントを挿入
+* Windows APIの呼び出しを監視
+* ネットワークトラフィックの監視
+
+>>>
+
+## システムの構成(3/5)
+### Anubis
+* QEMUベース
+* ゲストに解析用コンポーネントを挿入**しない**
+* エミュレーション時に命令を挿入してAPIの情報を取得
+
+>>>
+
+## システムの構成(4/5)
+### Ether
+* Xenベース
+* ゲストに解析用コンポーネントを挿入**しない**
+* システムコールを監視
+	- 実行された命令やメモリ書き込みも監視できるが，オーバーヘッドの問題から除外
+* ネットワークトラフィックの監視
+
+>>>
+## システムの構成(5/5)
+### ベアメタル
+* 最も正しくマルウェアを解析できるため，これが基準となる
+* ゲストに解析用コンポーネントを挿入**しない**
+* Transparentである必要があるため，CPUの動作などは解析できない
+* ネットワークトラフィックの監視
+* ファイルアクセスの監視
+	- iSCSIを用いてLVMにスナップショットを書き込む
+
+---
+
+## Behavior Deviation(偏向)
+検体群からevasive malwareだけを抽出したいが，<br>以下のような問題がある
+
+* 非決定性
+	- ランダムなファイル名
+* ライブラリのバージョンに依存する処理
+	- 全ての環境でバージョンを統一
+* 外部との通信に依存する処理
+	- スケジューラを用いて全く同時に検体を実行する
+	- TTLが極端に短いDNSサーバー(Fast-Flux)に対応
+
+---
+
+## Set-Intersection-Basedな類似度計算(1/2)
+* 既存研究
+	- Automated Classification and Analysis of Internet Malware[RAID'07]
+	- Towards an Understanding of Anti-virtualization and Anti-debugging Behavior in Modern Malware[IEEE DSN'08]
+	- DISARM[RAID'11]
+
+>>>
+
+## Set-Intersection-Basedな類似度計算(1/2)
+* e.g. ジャカード係数
+	- A∧B/A∨B
+	- 次の場合，ある環境でのみ発現する重要な処理を取りこぼしてしまう
+
+<br>
+
+|Profile A|Profile B|Profile C|
+|:----:|:----:|:----:|
+|Create file X|Create file X|Create file X|
+|Create file Y|Create file Y|Create file Y|
+|Create file Z|**Modify file Z**|**Connect to C&C**|
+
+<br>
+JaccardSimilarity(A,B)=2/4=JaccardSimilarity(A,C)
+
+---
+
+## 階層的なBehavior Profile(1/4)
+1. イベントの種類
+	- ネットワーク
+	- ファイルアクセス
+2. イベントが同じオブジェクトに関連するか
+	- 同じファイル
+	- 同じポート
+3. オペレーションの種類
+	- Create?
+	- Delete?
+	- プロトコル
+
+>>>
+
+## 階層的なBehavior Profile(2/4)
+
+* root
+	- Object Type
+		- Object Name
+			- Operation Name
+				- Operation Attributes
+* 単純な木構造
+
+>>>
+
+## 階層的なBehavior Profile(3/4)
+
+* root
+	- Object Type: file
+		- Object Name: C:\Y
+			- Operation Name: Create
+				- Operation Attributes: Size
+* file
+
+>>>
+
+## 階層的なBehavior Profile(4/4)
+
+* root
+	- Object Type: network
+		- Object Name: C&C Address
+			- Operation Name: http
+				- Operation Attributes: Size
+* network
+
+---
+
+## Behavior Profileの例(1/2)
+
+|Profile A|Profile C|
+|:----:|:----:|
+|Create file X|Create file X|
+|Create file Y|Create file Y|
+|Create file Z|**Connect to C&C**|
+
+>>>
+
+## Behavior Profileの例(2/3)
+### Profile A
+* root
+	- file
+		* C:\X
+			- create
+				* size
+		* C:\Y
+			- create
+				* size
+		* C:\Z
+			- create
+				* size
+
+>>>
+
+## Behavior Profileの例(3/3)
+### Profile C
+* root
+	- file
+		* C:\X
+			- create
+				* size
+		* C:\Y
+			- create
+				* size
+	- network
+		* C&C Address
+			- http
+				* size
+
+---
+
+## 階層的な類似度計算(1/2)
+
+![画像](image/bare0.jpg)
+
+HierarchicalSim(A,C)=AVG(Sim1...Sim4)=0.79
+
+>>>
+
+## 階層的な類似度計算(2/2)
+
+* HierarchicalSim(A,B)>HierarchicalSim(A,C)
+	- 0.87>0.79
+	- c.f. JaccardSimilarity(A,B)==JaccardSimilarity(A,C)
+* これによって，ジャカード係数では捉えられなかったbehavior deviationをカバーできるようになった
+	- で，deviationとする閾値はどうするのか？
+
+---
+
+## 評価(1/2)
+* 適合率と再現率
+	- ジャカード係数を用いた場合との比較<br>
+
+![画像](image/bare1.jpg)
+
+>>>
+
+## 評価(2/2)
+* 閾値tを変化させながら調和平均を探る
+	- t=0.70のとき適合率50%程度，再現率98%
+	- t = 0.84のとき適合率100%，再現率40.20%
+
+![画像](image/bare2.jpg)
+
+---
+
+## まとめ
+* Transparent sandboxの限界をカバーするため，検体群からevasive malwareを抽出したい
+* 階層表現によってbehavior deviationを検出する
+* 今後はiSCSIにフォーカスし，ベアメタル環境におけるより詳細なイベントの取得を追究するとのこと
+* 木構造をとる必然性は？重み付けで良いのでは？
+
+
+					</script>
+				</section>
+			</div>
+
+		</div>
+
+		<script src="lib/js/head.min.js"></script>
+		<script src="js/reveal.min.js"></script>
+
+		<script>
+
+			// Full list of configuration options available here:
+			// https://github.com/hakimel/reveal.js#configuration
+			Reveal.initialize({
+				controls: true,
+				progress: true,
+				history: true,
+				center: true,
+
+				theme: Reveal.getQueryHash().theme, // available themes are in /css/theme
+				transition: Reveal.getQueryHash().transition || 'default', // default/cube/page/concave/zoom/linear/fade/none
+
+				// Parallax scrolling
+				// parallaxBackgroundImage: 'https://s3.amazonaws.com/hakim-static/reveal-js/reveal-parallax-1.jpg',
+				// parallaxBackgroundSize: '2100px 900px',
+
+				// Optional libraries used to extend on reveal.js
+				dependencies: [
+					{ src: 'lib/js/classList.js', condition: function() { return !document.body.classList; } },
+					{ src: 'plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+					{ src: 'plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+					{ src: 'plugin/zoom-js/zoom.js', async: true, condition: function() { return !!document.body.classList; } },
+					{ src: 'plugin/notes/notes.js', async: true, condition: function() { return !!document.body.classList; } }
+				]
+			});
+
+		</script>
+
+	</body>
+</html>
